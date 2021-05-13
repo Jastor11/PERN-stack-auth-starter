@@ -40,41 +40,28 @@ class User {
       }
     })
 
-    if (credentials.email.indexOf("@") === -1) {
+    if (credentials.email.indexOf("@") <= 0) {
       throw new BadRequestError("Invalid email.")
     }
 
-    const existingUserWithEmail = await User.fetchUserByEmail(credentials.email)
-    if (existingUserWithEmail) {
-      throw new BadRequestError(`Duplicate email: ${credentials.email}`)
+    const existingUser = await User.fetchUserByEmail(credentials.email)
+    if (existingUser) {
+      throw new BadRequestError(`A user already exists with email: ${credentials.email}`)
     }
 
     const hashedPassword = await bcrypt.hash(credentials.password, BCRYPT_WORK_FACTOR)
     const normalizedEmail = credentials.email.toLowerCase()
 
-    // execute multiple dependent queries in a transaction
-    try {
-      await db.query(`BEGIN`)
+    const userResult = await db.query(
+      `INSERT INTO users (email, password, is_admin)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, is_admin, created_at;
+      `,
+      [normalizedEmail, hashedPassword, credentials.isAdmin]
+    )
+    const user = userResult.rows[0]
 
-      // create new user
-      const userResult = await db.query(
-        `INSERT INTO users (email, password, is_admin)
-         VALUES ($1, $2, $3)
-         RETURNING id, email, is_admin, created_at;
-        `,
-        [normalizedEmail, hashedPassword, credentials.isAdmin]
-      )
-      const user = userResult.rows[0]
-      // create profile for that user
-      await db.query(`INSERT INTO profiles (user_id) VALUES ($1)`, [user.id])
-      await db.query(`COMMIT`)
-
-      return user
-    } catch (e) {
-      console.log({ e })
-      await client.query(`ROLLBACK`)
-      throw new BadRequestError("Something went wrong with user registration.")
-    }
+    return User.makePublicUser(user)
   }
 
   static async fetchUserByEmail(email) {
