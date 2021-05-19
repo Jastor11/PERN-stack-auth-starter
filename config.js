@@ -17,7 +17,8 @@ function getDatabaseUri() {
   return process.env.DATABASE_URL || `postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}`
 }
 
-const BCRYPT_WORK_FACTOR = 13
+// Speed up bcrypt for tests when security isn't important
+const BCRYPT_WORK_FACTOR = IS_TESTING ? 4 : 13
 
 console.log("Auth Starter Config:".red)
 console.log("PORT:".blue, PORT)
